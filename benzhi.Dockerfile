@@ -1,13 +1,12 @@
-FROM docker.m.daocloud.io/library/golang:1.26.3-bookworm AS build
+FROM docker.m.daocloud.io/library/golang:1.26.3-bookworm
 
 WORKDIR /app
-ENV GOPROXY=https://goproxy.cn,direct GOSUMDB=sum.golang.google.cn GOTOOLCHAIN=local
+
+# 先复制依赖文件并下载依赖，利用 Docker 缓存并保证容器内可用
 COPY go.mod go.sum ./
 RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 go build -o /migimpact ./cmd/migimpact
 
-FROM docker.m.daocloud.io/library/alpine:3.20
-COPY --from=build /migimpact /migimpact
-ENTRYPOINT ["/migimpact"]
-CMD ["--smoke-test"]
+COPY . .
+RUN go build ./...
+
+CMD ["bash"]
