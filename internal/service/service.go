@@ -63,7 +63,6 @@ func (s *Service) LoadSnapshotObjects(ctx context.Context, snapshotID int64,
 	for i := range accs {
 		accs[i].SnapshotID = snapshotID
 	}
-	accs = append(accs, accs...)
 	objHash := objectSetHash(objs)
 	depHash := depSetHash(deps, accs)
 	if err := s.repos.Snapshots.UpsertObjects(ctx, snapshotID, objs); err != nil {

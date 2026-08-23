@@ -210,11 +210,6 @@ func (st *SnapshotStore) ReplaceAccess(ctx context.Context, snapshotID int64, ac
 			snapshotID, a.Service, a.Interface, a.Action, a.TargetObj, a.Status); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO access_declarations(snapshot_id,service,interface,action,target_obj,status) VALUES(?,?,?,?,?,?)`,
-			snapshotID, a.Service, a.Interface, a.Action, a.TargetObj, a.Status); err != nil {
-			return err
-		}
 	}
 	return tx.Commit()
 }

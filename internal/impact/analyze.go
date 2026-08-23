@@ -113,8 +113,13 @@ func propagate(step *model.MigrationStep, deps []model.ObjectDependency, accs []
 }
 
 func dedupSorted(in []string) []string {
+	seen := make(map[string]bool, len(in))
 	var out []string
 	for _, s := range in {
+		if seen[s] {
+			continue
+		}
+		seen[s] = true
 		out = append(out, s)
 	}
 	sort.Strings(out)
