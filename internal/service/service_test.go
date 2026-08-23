@@ -92,6 +92,39 @@ func TestImportScriptVersionContinuity(t *testing.T) {
 	}
 }
 
+// TestImportScriptExactTextFingerprint 验证指纹基于精确脚本文本：
+// 仅末尾换行不同的两份脚本不得被误判为同一版本，且第一份已保存脚本可按自身指纹找回。
+func TestImportScriptExactTextFingerprint(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open("")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+	svc := New(store.NewRepositories(st))
+
+	id1, err := svc.ImportScript(ctx, "m1", "1 CREATE_TABLE [a]", 1)
+	if err != nil {
+		t.Fatalf("ImportScript v1: %v", err)
+	}
+	// 仅末尾多一个换行：指纹应不同，按连续版本 2 导入成功，不得判重
+	id2, err := svc.ImportScript(ctx, "m2", "1 CREATE_TABLE [a]\n", 2)
+	if err != nil {
+		t.Fatalf("仅末尾换行不同的脚本应作为不同版本导入成功，得到 %v", err)
+	}
+	if id2 == id1 {
+		t.Fatalf("仅末尾换行不同的脚本不应复用既有 ID: %d == %d", id1, id2)
+	}
+	// 已保存脚本必须能按自身指纹找回（幂等）
+	id3, err := svc.ImportScript(ctx, "m1-dup", "1 CREATE_TABLE [a]", 2)
+	if !errors.Is(err, model.ErrDupFingerprint) {
+		t.Fatalf("精确内容再次导入应按指纹命中既有脚本，得到 %v", err)
+	}
+	if id3 != id1 {
+		t.Fatalf("幂等导入应返回既有 ID: %d != %d", id3, id1)
+	}
+}
+
 // TestFreezePlanBlockedAnalysis 未完成分析不可冻结。
 func TestFreezePlanBlockedAnalysis(t *testing.T) {
 	ctx := context.Background()

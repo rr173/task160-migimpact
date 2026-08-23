@@ -97,8 +97,10 @@ func normalizeType(t string) string {
 }
 
 // Fingerprint 计算脚本内容指纹（幂等判重键）。
+// 指纹基于精确脚本文本：仅末尾换行/空白不同的两份内容视为不同版本，
+// 不得被 TrimSpace 等规范化手段误判为同一指纹。
 func Fingerprint(content string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(content)))
+	sum := sha256.Sum256([]byte(content))
 	return hex.EncodeToString(sum[:])
 }
 

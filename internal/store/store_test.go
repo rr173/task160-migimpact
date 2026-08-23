@@ -81,10 +81,13 @@ func TestScriptDedup(t *testing.T) {
 	if id1 == id2 {
 		t.Fatal("两次插入不应返回相同 ID")
 	}
-	// 幂等查找
+	// 幂等查找：已保存脚本必须能按自身内容哈希找回（不得被 name 过滤漏掉）
 	found, err := repos.Scripts.GetScriptByHash(ctx, "same-hash")
 	if err != nil || found.ID != id1 {
 		t.Fatalf("GetScriptByHash: %v %v", found, err)
+	}
+	if found.Name != "m1" {
+		t.Fatalf("找回的脚本应保留原名称 m1，得到 %q", found.Name)
 	}
 }
 

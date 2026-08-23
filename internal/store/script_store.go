@@ -28,9 +28,11 @@ func (st *ScriptStore) CreateScript(ctx context.Context, s *model.MigrationScrip
 }
 
 // GetScriptByHash 按内容哈希查找脚本（幂等导入判重）。
+// content_hash 具备 UNIQUE 约束，本身即可唯一定位脚本；
+// 不再叠加 name 过滤，以免把按自身指纹找回的已保存脚本漏掉。
 func (st *ScriptStore) GetScriptByHash(ctx context.Context, hash string) (*model.MigrationScript, error) {
 	row := st.db.QueryRowContext(ctx,
-		`SELECT id,name,version,status,content_hash,content,created_at FROM migration_scripts WHERE content_hash=? AND name=''`, hash)
+		`SELECT id,name,version,status,content_hash,content,created_at FROM migration_scripts WHERE content_hash=?`, hash)
 	var s model.MigrationScript
 	var created sql.NullString
 	if err := row.Scan(&s.ID, &s.Name, &s.Version, &s.Status, &s.ContentHash, &s.Content, &created); err != nil {

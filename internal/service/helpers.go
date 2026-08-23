@@ -53,9 +53,10 @@ func depSetHash(deps []model.ObjectDependency, accs []model.AccessDeclaration) s
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// sha256Hex 计算脚本内容指纹，委托 script.Fingerprint 保证「精确脚本文本」语义：
+// 仅末尾换行/空白不同的两份内容必须得到不同指纹，避免误判为同一版本。
 func sha256Hex(s string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(s)))
-	return hex.EncodeToString(sum[:])
+	return script.Fingerprint(s)
 }
 
 // verifyVersion 校验脚本版本连续性。

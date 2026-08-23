@@ -51,6 +51,21 @@ func TestFingerprintStable(t *testing.T) {
 	}
 }
 
+// TestFingerprintExactText 验证指纹基于精确脚本文本：
+// 仅末尾换行不同的两份内容不得被误判为同一指纹。
+func TestFingerprintExactText(t *testing.T) {
+	a := Fingerprint("1 DROP_TABLE [orders]")
+	b := Fingerprint("1 DROP_TABLE [orders]\n")
+	if a == b {
+		t.Fatalf("仅末尾换行不同的脚本应得到不同指纹，却均为 %s", a)
+	}
+	// 同理：末尾空白差异亦应区分
+	c := Fingerprint("1 DROP_TABLE [orders] \n")
+	if a == c || b == c {
+		t.Fatalf("末尾空白差异应得到不同指纹")
+	}
+}
+
 func TestVerifyVersionContinuity(t *testing.T) {
 	existing := []model.MigrationScript{
 		{Version: 1}, {Version: 2},
