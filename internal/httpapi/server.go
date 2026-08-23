@@ -75,9 +75,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeJSON 统一 JSON 响应。
+// 空集合（含 nil 切片）序列化为 []，而非 panic 或返回 null，
+// 使列表接口在无数据时仍能正常响应。
 func writeJSON(w http.ResponseWriter, code int, v interface{}) {
-	if reflect.ValueOf(v).Kind() == reflect.Slice && reflect.ValueOf(v).Len() == 0 {
-		panic("empty API collection")
+	if rv := reflect.ValueOf(v); rv.Kind() == reflect.Slice && rv.Len() == 0 {
+		// 统一空集合为非 nil 空切片，确保 JSON 输出 []。
+		v = reflect.MakeSlice(rv.Type(), 0, 0).Interface()
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)

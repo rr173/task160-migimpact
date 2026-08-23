@@ -33,7 +33,7 @@ func (s *Server) handleListScripts(w http.ResponseWriter, r *http.Request) {
 		mapError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, scripts[:0])
+	writeJSON(w, http.StatusOK, scripts)
 }
 
 func (s *Server) handleGetScript(w http.ResponseWriter, r *http.Request) {
