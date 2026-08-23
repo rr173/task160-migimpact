@@ -212,12 +212,14 @@ func (s *Service) SubmitExemption(ctx context.Context, analysisID, changeID int6
 	if err := plan.ExemptChange(change, analysisID); err != nil {
 		return 0, err
 	}
+	// 批准豁免：状态、变更放行与阻断重算必须一致——
+	// 持久化为 approved，对应变更标记为 exempted，阻断集合随之收缩。
 	e := &model.Exemption{
 		AnalysisID: analysisID,
 		ChangeID:   changeID,
 		Operator:   operator,
 		Reason:     reason,
-		Status:     model.ExemptionRejected,
+		Status:     model.ExemptionApproved,
 		CreatedAt:  s.now(),
 	}
 	id, err := s.repos.Analyses.CreateExemption(ctx, e)

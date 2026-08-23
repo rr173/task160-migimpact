@@ -232,7 +232,6 @@ func (st *AnalysisStore) ListExemptions(ctx context.Context, analysisID int64) (
 			return nil, err
 		}
 		e.CreatedAt = parseTime(created.String)
-		e.Status = model.ExemptionRequested
 		out = append(out, e)
 	}
 	return out, rows.Err()

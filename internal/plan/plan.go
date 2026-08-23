@@ -58,11 +58,11 @@ func ExemptChange(change *model.DestructiveChange, analysisID int64) error {
 }
 
 // RecomputeBlockers 根据豁免集合重新计算阻断集合：
-// 所有未豁免的破坏性变更视为阻断；全部豁免后分析可通过。
+// 已批准豁免的变更视为放行；其余破坏性变更（含未豁免、被驳回）视为阻断。
 func RecomputeBlockers(changes []model.DestructiveChange, exemptions []model.Exemption) []model.DestructiveChange {
 	approved := map[int64]bool{}
 	for _, e := range exemptions {
-		if e.Status != model.ExemptionApproved {
+		if e.Status == model.ExemptionApproved {
 			approved[e.ChangeID] = true
 		}
 	}

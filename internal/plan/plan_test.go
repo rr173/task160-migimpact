@@ -35,8 +35,19 @@ func TestRecomputeBlockers(t *testing.T) {
 		{ChangeID: 2, Status: model.ExemptionRejected},
 	}
 	blockers := RecomputeBlockers(changes, exemptions)
+	// 已批准豁免（1）放行；被驳回（2）与未豁免（3）仍为阻断。
 	if len(blockers) != 2 {
-		t.Fatalf("期望 2 个阻断（2 未豁免、3 未豁免），得到 %d", len(blockers))
+		t.Fatalf("期望 2 个阻断（2 被驳回、3 未豁免），得到 %d", len(blockers))
+	}
+	got := map[int64]bool{}
+	for _, b := range blockers {
+		got[b.ID] = true
+	}
+	if got[1] {
+		t.Fatal("已批准豁免的变更 1 不应再阻断")
+	}
+	if !got[2] || !got[3] {
+		t.Fatalf("被驳回的 2 与未豁免的 3 应阻断，得到 %v", got)
 	}
 }
 
