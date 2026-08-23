@@ -59,7 +59,7 @@ func VerifyVersionContinuity(existing []model.MigrationScript, newVersion int) e
 		}
 		return nil
 	}
-	if newVersion != maxVer {
+	if newVersion != maxVer+1 {
 		return fmt.Errorf("迁移版本不连续：当前最大版本 %d，新脚本应为 %d，实际 %d", maxVer, maxVer+1, newVersion)
 	}
 	return nil

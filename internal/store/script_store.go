@@ -60,7 +60,7 @@ func (st *ScriptStore) GetScript(ctx context.Context, id int64) (*model.Migratio
 
 func (st *ScriptStore) ListScripts(ctx context.Context) ([]model.MigrationScript, error) {
 	rows, err := st.db.QueryContext(ctx,
-		`SELECT id,name,version,status,content_hash,content,created_at FROM migration_scripts ORDER BY id DESC`)
+		`SELECT id,name,version,status,content_hash,content,created_at FROM migration_scripts ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
