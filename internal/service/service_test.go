@@ -106,3 +106,69 @@ func TestFreezePlanBlockedAnalysis(t *testing.T) {
 		t.Fatal("不存在的分析应报错")
 	}
 }
+
+// TestSnapshotHashSensitiveToUnique 验证唯一性约束翻转改变持久化对象哈希
+// （ObjectHash），使唯一性变化在整个迁移评估流程中可见。
+func TestSnapshotHashSensitiveToUnique(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open("")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+	svc := New(store.NewRepositories(st))
+
+	snapID, err := svc.CreateSnapshot(ctx, "uniq-snapshot")
+	if err != nil {
+		t.Fatalf("CreateSnapshot: %v", err)
+	}
+
+	objs := []model.SchemaObject{
+		{ObjType: "table", Name: "orders"},
+		{ObjType: "index", TableName: "orders", Name: "idx_orders_customer_id", Unique: false},
+	}
+	deps := []model.ObjectDependency{}
+	accs := []model.AccessDeclaration{}
+	if err := svc.LoadSnapshotObjects(ctx, snapID, objs, deps, accs); err != nil {
+		t.Fatalf("LoadSnapshotObjects: %v", err)
+	}
+	snap1, err := svc.GetSnapshot(ctx, snapID)
+	if err != nil {
+		t.Fatalf("GetSnapshot: %v", err)
+	}
+	hashBefore := snap1.ObjectHash
+	if hashBefore == "" {
+		t.Fatal("对象哈希未固化")
+	}
+
+	// 翻转唯一性约束：非唯一 -> 唯一
+	objs[1].Unique = true
+	if err := svc.LoadSnapshotObjects(ctx, snapID, objs, deps, accs); err != nil {
+		t.Fatalf("LoadSnapshotObjects after unique flip: %v", err)
+	}
+	snap2, err := svc.GetSnapshot(ctx, snapID)
+	if err != nil {
+		t.Fatalf("GetSnapshot after flip: %v", err)
+	}
+	if snap2.ObjectHash == hashBefore {
+		t.Fatal("唯一性翻转应改变 ObjectHash，但哈希未变")
+	}
+
+	// 持久化读回的对象应反映翻转后的唯一性
+	gotObjs, err := svc.GetSnapshotObjects(ctx, snapID)
+	if err != nil {
+		t.Fatalf("GetSnapshotObjects: %v", err)
+	}
+	var idx *model.SchemaObject
+	for i := range gotObjs {
+		if gotObjs[i].ObjType == "index" && gotObjs[i].Name == "idx_orders_customer_id" {
+			idx = &gotObjs[i]
+		}
+	}
+	if idx == nil {
+		t.Fatal("未读回索引对象")
+	}
+	if !idx.Unique {
+		t.Fatal("读回的索引唯一性应为 true")
+	}
+}

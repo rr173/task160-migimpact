@@ -61,6 +61,34 @@ func TestDiffSnapshots(t *testing.T) {
 	}
 }
 
+// TestDiffSnapshotsUniqueFlip 验证唯一性约束翻转被识别为变更（哈希不同）。
+func TestDiffSnapshotsUniqueFlip(t *testing.T) {
+	before := []model.SchemaObject{
+		{ObjType: "index", TableName: "orders", Name: "idx", Unique: false, Hash: "h1"},
+	}
+	after := []model.SchemaObject{
+		{ObjType: "index", TableName: "orders", Name: "idx", Unique: true, Hash: "h2"},
+	}
+	d := DiffSnapshots(before, after)
+	if len(d.Changed) != 1 || d.Changed[0] != "idx" {
+		t.Fatalf("唯一性翻转应记为变更，得到 changed=%v added=%v removed=%v", d.Changed, d.Added, d.Removed)
+	}
+}
+
+// TestDiffSnapshotsUniqueFlipNoHash 验证无哈希时按属性（含唯一性）识别变更。
+func TestDiffSnapshotsUniqueFlipNoHash(t *testing.T) {
+	before := []model.SchemaObject{
+		{ObjType: "index", TableName: "orders", Name: "idx", Unique: false},
+	}
+	after := []model.SchemaObject{
+		{ObjType: "index", TableName: "orders", Name: "idx", Unique: true},
+	}
+	d := DiffSnapshots(before, after)
+	if len(d.Changed) != 1 {
+		t.Fatalf("无哈希时唯一性翻转应记为变更，得到 changed=%v", d.Changed)
+	}
+}
+
 func TestPlanHashDeterministic(t *testing.T) {
 	a := PlanHash(1, 2, 3, []int{1, 2, 3})
 	b := PlanHash(1, 2, 3, []int{1, 2, 3})

@@ -14,9 +14,11 @@ import (
 )
 
 // hashObj 计算单个对象定义哈希。
+// 唯一性约束是影响语义的属性，必须参与哈希，否则唯一性翻转不会改变哈希，
+// 使模式定义与持久化哈希在迁移评估流程中无法反映该变化。
 func hashObj(o *model.SchemaObject) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "%s|%s|%s|%s|%t", o.ObjType, o.TableName, o.Name, o.DataType, o.Nullable)
+	fmt.Fprintf(h, "%s|%s|%s|%s|%t|%t", o.ObjType, o.TableName, o.Name, o.DataType, o.Nullable, o.Unique)
 	return hex.EncodeToString(h.Sum(nil))
 }
 

@@ -76,6 +76,8 @@ func RecomputeBlockers(changes []model.DestructiveChange, exemptions []model.Exe
 }
 
 // DiffSnapshots 比较两个快照的对象集合差异，返回新增/删除/变更三类对象名。
+// 变更判定依据对象的规范化定义摘要（Hash）：同一对象键在不同快照中定义变化
+// （如数据类型、可空性或唯一性约束翻转）即记为变更，使属性级变化在差异中可见。
 func DiffSnapshots(before, after []model.SchemaObject) DiffResult {
 	beforeMap := indexByKey(before)
 	afterMap := indexByKey(after)
@@ -83,7 +85,7 @@ func DiffSnapshots(before, after []model.SchemaObject) DiffResult {
 	for k, o := range afterMap {
 		if bo, ok := beforeMap[k]; !ok {
 			d.Added = append(d.Added, o.Name)
-		} else if bo.Name != o.Name {
+		} else if !sameDefinition(bo, o) {
 			d.Changed = append(d.Changed, o.Name)
 		}
 	}
@@ -96,6 +98,19 @@ func DiffSnapshots(before, after []model.SchemaObject) DiffResult {
 	sort.Strings(d.Changed)
 	sort.Strings(d.Removed)
 	return d
+}
+
+// sameDefinition 判断两个同键对象的定义是否一致。
+// 优先使用持久化哈希（Hash）；哈希为空时回退到规范化定义文本（Definition）。
+// 二者均缺失时，按属性逐项比较，确保唯一性等属性变化同样被识别。
+func sameDefinition(a, b model.SchemaObject) bool {
+	if a.Hash != "" || b.Hash != "" {
+		return a.Hash == b.Hash
+	}
+	if a.Definition != "" || b.Definition != "" {
+		return a.Definition == b.Definition
+	}
+	return a.DataType == b.DataType && a.Nullable == b.Nullable && a.Unique == b.Unique
 }
 
 // DiffResult 是快照差异摘要。

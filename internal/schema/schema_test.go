@@ -19,6 +19,20 @@ func TestDefinitionStable(t *testing.T) {
 	}
 }
 
+// TestDefinitionSensitiveToUnique 验证唯一性约束翻转会改变规范化定义，
+// 从而让模式定义差异在迁移评估流程中可见。
+func TestDefinitionSensitiveToUnique(t *testing.T) {
+	nonUnique := model.SchemaObject{ObjType: "index", TableName: "orders", Name: "idx_orders_customer_id", Unique: false}
+	unique := model.SchemaObject{ObjType: "index", TableName: "orders", Name: "idx_orders_customer_id", Unique: true}
+	if Definition(&nonUnique) == Definition(&unique) {
+		t.Fatal("唯一性翻转应改变定义")
+	}
+	// 集合哈希也应随之不同，确保持久化哈希反映唯一性变化。
+	if Hash([]model.SchemaObject{nonUnique}) == Hash([]model.SchemaObject{unique}) {
+		t.Fatal("唯一性翻转应改变集合哈希")
+	}
+}
+
 func TestValidateSnapshotObjects(t *testing.T) {
 	objs := []model.SchemaObject{
 		{ObjType: "table", Name: "orders"},

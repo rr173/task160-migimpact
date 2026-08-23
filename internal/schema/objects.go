@@ -33,6 +33,8 @@ func ParseObjectKey(s string) (ObjectKey, error) {
 func TableKey(table string) ObjectKey { return ObjectKey{ObjType: "table", Name: table} }
 
 // Definition 依据对象属性生成稳定规范化定义，供哈希与去重使用。
+// 任何影响语义的属性（数据类型、可空性、唯一性）变化都会改变定义，
+// 从而让模式定义差异在迁移评估流程中可见。
 func Definition(o *model.SchemaObject) string {
 	var b strings.Builder
 	b.WriteString(o.ObjType)
@@ -44,6 +46,12 @@ func Definition(o *model.SchemaObject) string {
 	b.WriteString(o.DataType)
 	b.WriteString("|nullable=")
 	if o.Nullable {
+		b.WriteString("1")
+	} else {
+		b.WriteString("0")
+	}
+	b.WriteString("|unique=")
+	if o.Unique {
 		b.WriteString("1")
 	} else {
 		b.WriteString("0")
