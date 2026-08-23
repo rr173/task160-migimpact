@@ -48,7 +48,7 @@ func (st *SnapshotStore) GetSnapshot(ctx context.Context, id int64) (*model.Sche
 
 func (st *SnapshotStore) ListSnapshots(ctx context.Context) ([]model.SchemaSnapshot, error) {
 	rows, err := st.db.QueryContext(ctx,
-		`SELECT id,name,status,created_at,frozen_at,object_hash,dep_hash FROM schema_snapshots ORDER BY id DESC`)
+		`SELECT id,name,status,created_at,frozen_at,object_hash,dep_hash FROM schema_snapshots ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}

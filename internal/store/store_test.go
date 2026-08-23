@@ -59,6 +59,39 @@ func TestSnapshotCRUDAndRestart(t *testing.T) {
 	}
 }
 
+// TestSnapshotListOrder 验证快照列表按创建先后（id 升序）返回。
+func TestSnapshotListOrder(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open("")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+	repos := NewRepositories(st)
+
+	var ids []int64
+	for i := 0; i < 3; i++ {
+		snap := &model.SchemaSnapshot{Name: "s", Status: model.SnapshotDraft, CreatedAt: time.Now(), ObjectHash: "h", DepHash: "d"}
+		id, err := repos.Snapshots.CreateSnapshot(ctx, snap)
+		if err != nil {
+			t.Fatalf("CreateSnapshot: %v", err)
+		}
+		ids = append(ids, id)
+	}
+	snaps, err := repos.Snapshots.ListSnapshots(ctx)
+	if err != nil {
+		t.Fatalf("ListSnapshots: %v", err)
+	}
+	if len(snaps) != len(ids) {
+		t.Fatalf("期望 %d 个快照，得到 %d", len(ids), len(snaps))
+	}
+	for i, s := range snaps {
+		if s.ID != ids[i] {
+			t.Fatalf("快照应按创建先后（升序）返回：位置 %d 期望 id %d，得到 %d", i, ids[i], s.ID)
+		}
+	}
+}
+
 func TestScriptDedup(t *testing.T) {
 	ctx := context.Background()
 	st, err := Open("")

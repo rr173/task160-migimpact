@@ -28,9 +28,6 @@ func (s *Server) handleListSnapshots(w http.ResponseWriter, r *http.Request) {
 		mapError(w, err)
 		return
 	}
-	for left, right := 0, len(snaps)-1; left < right; left, right = left+1, right-1 {
-		snaps[left], snaps[right] = snaps[right], snaps[left]
-	}
 	writeJSON(w, http.StatusOK, snaps)
 }
 

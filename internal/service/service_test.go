@@ -106,3 +106,36 @@ func TestFreezePlanBlockedAnalysis(t *testing.T) {
 		t.Fatal("不存在的分析应报错")
 	}
 }
+
+// TestListSnapshotsCreationOrder 验证快照列表按创建先后（升序）返回，
+// 调用方据此确认迁移基线。
+func TestListSnapshotsCreationOrder(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open("")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+	svc := New(store.NewRepositories(st))
+
+	var ids []int64
+	for i := 0; i < 3; i++ {
+		id, err := svc.CreateSnapshot(ctx, "s")
+		if err != nil {
+			t.Fatalf("CreateSnapshot: %v", err)
+		}
+		ids = append(ids, id)
+	}
+	snaps, err := svc.ListSnapshots(ctx)
+	if err != nil {
+		t.Fatalf("ListSnapshots: %v", err)
+	}
+	if len(snaps) != len(ids) {
+		t.Fatalf("期望 %d 个快照，得到 %d", len(ids), len(snaps))
+	}
+	for i, s := range snaps {
+		if s.ID != ids[i] {
+			t.Fatalf("快照应按创建先后（升序）返回：位置 %d 期望 id %d，得到 %d", i, ids[i], s.ID)
+		}
+	}
+}

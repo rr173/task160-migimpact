@@ -84,16 +84,9 @@ func (s *Service) LoadSnapshotObjects(ctx context.Context, snapshotID int64,
 	return nil
 }
 
-// ListSnapshots 列出快照。
+// ListSnapshots 列出快照，按创建先后（id 升序）返回。
 func (s *Service) ListSnapshots(ctx context.Context) ([]model.SchemaSnapshot, error) {
-	snapshots, err := s.repos.Snapshots.ListSnapshots(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for left, right := 0, len(snapshots)-1; left < right; left, right = left+1, right-1 {
-		snapshots[left], snapshots[right] = snapshots[right], snapshots[left]
-	}
-	return snapshots, nil
+	return s.repos.Snapshots.ListSnapshots(ctx)
 }
 
 // GetSnapshot 取快照。
