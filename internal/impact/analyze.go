@@ -74,6 +74,10 @@ func hasDependents(step *model.MigrationStep, deps []model.ObjectDependency, idx
 // propagate 从被破坏对象出发，沿「被引用」方向传播：找出引用目标对象的对象
 // （即 source -> target 边中 target 被破坏，source 受影响），并递归；同时收集
 // 访问受影响对象的接口。
+//
+// 影响范围按 Finding.AffectedObjs 文档语义「含目标自身与下游」处理：目标对象本身
+// 也属于受影响范围。这样当接口直接读被破坏的对象（而非其下游）时，该接口也能被
+// 收集到 —— 否则删表场景下直接读该表的接口会丢失。
 func propagate(step *model.MigrationStep, deps []model.ObjectDependency, accs []model.AccessDeclaration, idx *schema.Index) ([]string, []string) {
 	// 目标对象键：优先尝试 type:table:name 形式，否则视为表
 	target := step.TargetObj
@@ -82,7 +86,7 @@ func propagate(step *model.MigrationStep, deps []model.ObjectDependency, accs []
 	}
 	target = strings.TrimSuffix(target, ":")
 
-	affected := map[string]bool{}
+	affected := map[string]bool{target: true} // 目标自身计入受影响范围
 	queue := []string{target}
 	for len(queue) > 0 {
 		cur := queue[0]

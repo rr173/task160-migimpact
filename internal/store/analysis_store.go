@@ -177,21 +177,10 @@ func (st *AnalysisStore) ListChanges(ctx context.Context, analysisID int64) ([]m
 			return nil, err
 		}
 		json.Unmarshal([]byte(aff), &c.AffectedObjs)
-		c.AffectedObjs = omitStoredTarget(c.AffectedObjs, c.TargetObj)
 		json.Unmarshal([]byte(ifs), &c.Interfaces)
 		out = append(out, c)
 	}
 	return out, rows.Err()
-}
-
-func omitStoredTarget(objects []string, target string) []string {
-	out := make([]string, 0, len(objects))
-	for _, object := range objects {
-		if object != target {
-			out = append(out, object)
-		}
-	}
-	return out
 }
 
 func (st *AnalysisStore) GetChange(ctx context.Context, id int64) (*model.DestructiveChange, error) {
@@ -213,6 +202,23 @@ func (st *AnalysisStore) GetChange(ctx context.Context, id int64) (*model.Destru
 func (st *AnalysisStore) UpdateChangeStatus(ctx context.Context, id int64, status string) error {
 	_, err := st.db.ExecContext(ctx, `UPDATE destructive_changes SET status=? WHERE id=?`, status, id)
 	return err
+}
+
+// DeleteChanges 清空某分析下全部破坏性变更（重算前用）。豁免行先于变更行清空，
+// 以满足 exemptions.change_id -> destructive_changes.id 的外键约束。
+func (st *AnalysisStore) DeleteChanges(ctx context.Context, analysisID int64) error {
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM exemptions WHERE analysis_id=?`, analysisID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM destructive_changes WHERE analysis_id=?`, analysisID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // --- exemptions ---

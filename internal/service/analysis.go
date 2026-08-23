@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,7 +12,9 @@ import (
 )
 
 // RunAnalysis 对指定快照与脚本执行影响分析。
-// 幂等：同一 (snapshot, script) 已存在分析时返回既有结果。
+// 幂等：同一 (snapshot, script) 已存在且「已完成」的分析直接返回既有结果。
+// 未完成（queued/running/blocked）的分析视为崩溃残留，重置并重新计算，以保证
+// 重启后影响范围（受影响对象与接口）在变更记录中完整。
 func (s *Service) RunAnalysis(ctx context.Context, snapshotID, scriptID int64) (*model.ImpactAnalysis, []impact.Finding, []int, error) {
 	snap, err := s.repos.Snapshots.GetSnapshot(ctx, snapshotID)
 	if err != nil {
@@ -39,11 +42,18 @@ func (s *Service) RunAnalysis(ctx context.Context, snapshotID, scriptID int64) (
 	}
 	inputHash := inputFingerprint(snap.ObjectHash, scr.ContentHash)
 
-	// 幂等：已有分析直接返回
+	// 幂等：已完成的分析直接返回既有结果
 	if existing, err := s.repos.Analyses.GetAnalysisByInput(ctx, snapshotID, scriptID); err == nil {
-		findings := s.loadFindings(ctx, existing.ID)
-		order := s.loadOrder(ctx, existing.ID, steps)
-		return existing, findings, order, nil
+		if existing.Status == model.AnalysisCompleted {
+			findings := s.loadFindings(ctx, existing.ID)
+			order := s.loadOrder(ctx, existing.ID, steps)
+			return existing, findings, order, nil
+		}
+		// 未完成（崩溃残留）：重置为 queued 后重新计算
+		if err := s.repos.Analyses.UpdateAnalysisStatus(ctx, existing.ID, model.AnalysisQueued, nil); err != nil {
+			return nil, nil, nil, err
+		}
+		return s.executeAnalysis(ctx, existing.ID, snapshotID, scriptID, objs, deps, accs, steps)
 	}
 
 	analysis := &model.ImpactAnalysis{
@@ -54,21 +64,39 @@ func (s *Service) RunAnalysis(ctx context.Context, snapshotID, scriptID int64) (
 		CreatedAt:  s.now(),
 	}
 	id, err := s.repos.Analyses.CreateAnalysis(ctx, analysis)
-	if err != nil && err != model.ErrConflict {
+	if err != nil && !errors.Is(err, model.ErrConflict) {
 		return nil, nil, nil, err
 	}
-	if err == model.ErrConflict {
-		// 并发创建：读取既有
+	if errors.Is(err, model.ErrConflict) {
+		// 并发创建：读取既有；未完成则重算，已完成则返回缓存
 		existing, gerr := s.repos.Analyses.GetAnalysisByInput(ctx, snapshotID, scriptID)
 		if gerr != nil {
 			return nil, nil, nil, gerr
 		}
-		findings := s.loadFindings(ctx, existing.ID)
-		order := s.loadOrder(ctx, existing.ID, steps)
-		return existing, findings, order, nil
+		if existing.Status == model.AnalysisCompleted {
+			findings := s.loadFindings(ctx, existing.ID)
+			order := s.loadOrder(ctx, existing.ID, steps)
+			return existing, findings, order, nil
+		}
+		if err := s.repos.Analyses.UpdateAnalysisStatus(ctx, existing.ID, model.AnalysisQueued, nil); err != nil {
+			return nil, nil, nil, err
+		}
+		return s.executeAnalysis(ctx, existing.ID, snapshotID, scriptID, objs, deps, accs, steps)
 	}
 
+	return s.executeAnalysis(ctx, id, snapshotID, scriptID, objs, deps, accs, steps)
+}
+
+// executeAnalysis 执行分析主体：置 running → 运行 impact.Run + OrderPlan →
+// 写入破坏性变更 → 更新步骤状态 → 置 completed。重算时先清空旧变更记录。
+func (s *Service) executeAnalysis(ctx context.Context, id, snapshotID, scriptID int64,
+	objs []model.SchemaObject, deps []model.ObjectDependency, accs []model.AccessDeclaration,
+	steps []model.MigrationStep) (*model.ImpactAnalysis, []impact.Finding, []int, error) {
 	if err := s.repos.Analyses.UpdateAnalysisStatus(ctx, id, model.AnalysisRunning, nil); err != nil {
+		return nil, nil, nil, err
+	}
+	// 重算前清空旧的破坏性变更，避免重复或脏数据
+	if err := s.repos.Analyses.DeleteChanges(ctx, id); err != nil {
 		return nil, nil, nil, err
 	}
 
@@ -94,7 +122,7 @@ func (s *Service) RunAnalysis(ctx context.Context, snapshotID, scriptID int64) (
 			StepID:       f.StepID,
 			ChangeType:   f.ChangeType,
 			TargetObj:    f.TargetObj,
-			AffectedObjs: omitDirectTarget(f.AffectedObjs, f.TargetObj),
+			AffectedObjs: f.AffectedObjs,
 			Interfaces:   f.Interfaces,
 			Status:       "identified",
 		})
@@ -183,16 +211,15 @@ func (s *Service) ListChanges(ctx context.Context, analysisID int64) ([]model.De
 	return s.repos.Analyses.ListChanges(ctx, analysisID)
 }
 
-// Recover 重启恢复：把排队/分析中的任务重置为 queued，并重新执行。
+// Recover 重启恢复：把排队/分析中的任务交给 RunAnalysis 重新执行。
+// RunAnalysis 对未完成的分析会重置并重算（含重写破坏性变更），从而保证重启后
+// 崩溃残留的分析不再缺失影响范围记录。
 func (s *Service) Recover(ctx context.Context) (int, error) {
 	queued, err := s.repos.Analyses.ListQueuedAnalyses(ctx)
 	if err != nil {
 		return 0, err
 	}
 	for _, a := range queued {
-		if a.Status == model.AnalysisRunning {
-			_ = s.repos.Analyses.UpdateAnalysisStatus(ctx, a.ID, model.AnalysisQueued, nil)
-		}
 		if _, _, _, err := s.RunAnalysis(ctx, a.SnapshotID, a.ScriptID); err != nil {
 			return 0, err
 		}
@@ -288,13 +315,3 @@ func (s *Service) GetPlan(ctx context.Context, id int64) (*model.MigrationPlan, 
 }
 
 func ptr(t time.Time) *time.Time { return &t }
-
-func omitDirectTarget(objects []string, target string) []string {
-	out := make([]string, 0, len(objects))
-	for _, object := range objects {
-		if object != target {
-			out = append(out, object)
-		}
-	}
-	return out
-}
