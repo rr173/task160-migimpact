@@ -114,3 +114,44 @@ func TestOrderPlanStableSeq(t *testing.T) {
 		}
 	}
 }
+
+// TestOrderPlanReturnsSeqNotIndex 断言 OrderPlan 永远返回步骤的真实 Seq 编号，
+// 而非步骤在 steps 切片中的下标。步骤编号不连续时（如 10/20/30）这一点尤为关键：
+// 下标 0/1/2 会改写真实执行次序，导致计划丢失或错位。
+func TestOrderPlanReturnsSeqNotIndex(t *testing.T) {
+	steps := []model.MigrationStep{
+		{Seq: 10, StepType: "drop_column", TargetObj: "column:orders:customer_id"},
+		{Seq: 20, StepType: "drop_table", TargetObj: "orders"},
+		{Seq: 30, StepType: "create_table", TargetObj: "audit_log"},
+	}
+	deps := []model.ObjectDependency{
+		{DepType: "index_col", SourceObj: "index:orders:idx1", TargetObj: "column:orders:customer_id"},
+	}
+	order, err := OrderPlan(steps, deps)
+	if err != nil {
+		t.Fatalf("OrderPlan: %v", err)
+	}
+	// 次序只能是步骤 Seq 之一，绝不应出现下标 0/1/2。
+	validSeq := map[int]bool{10: true, 20: true, 30: true}
+	if len(order) != len(steps) {
+		t.Fatalf("次序应含 %d 步，得到 %v", len(steps), order)
+	}
+	for _, v := range order {
+		if !validSeq[v] {
+			t.Fatalf("次序中出现非步骤编号 %d（疑似下标），完整次序 %v", v, order)
+		}
+	}
+	// drop_table(Seq=20) 必须排在删列(Seq=10)之后。
+	posDrop, posCol := -1, -1
+	for i, seq := range order {
+		if seq == 20 {
+			posDrop = i
+		}
+		if seq == 10 {
+			posCol = i
+		}
+	}
+	if posDrop < posCol {
+		t.Fatalf("drop_table 应在列操作之后: %v", order)
+	}
+}

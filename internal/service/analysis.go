@@ -264,10 +264,11 @@ func (s *Service) FreezePlan(ctx context.Context, analysisID int64) (*model.Migr
 		SnapshotID: a.SnapshotID,
 		ScriptID:   a.ScriptID,
 		Status:     model.PlanFrozen,
-		StepOrder:  append([]int(nil), seqOrder[1:]...),
-		PlanHash:   plan.PlanHash(analysisID, a.SnapshotID, a.ScriptID, seqOrder),
-		CreatedAt:  s.now(),
-		FrozenAt:   ptr(s.now()),
+		// 完整保留真实步骤编号与执行顺序，与 PlanHash 计算使用的次序保持一致。
+		StepOrder: append([]int(nil), seqOrder...),
+		PlanHash:  plan.PlanHash(analysisID, a.SnapshotID, a.ScriptID, seqOrder),
+		CreatedAt: s.now(),
+		FrozenAt:  ptr(s.now()),
 	}
 	id, err := s.repos.Analyses.CreatePlan(ctx, p)
 	if err != nil {

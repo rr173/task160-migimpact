@@ -265,9 +265,6 @@ func (st *AnalysisStore) GetPlan(ctx context.Context, id int64) (*model.Migratio
 	p.CreatedAt = parseTime(created.String)
 	if order.Valid {
 		json.Unmarshal([]byte(order.String), &p.StepOrder)
-		if len(p.StepOrder) > 0 {
-			p.StepOrder = p.StepOrder[1:]
-		}
 	}
 	if frozen.Valid {
 		t := parseTime(frozen.String)

@@ -74,7 +74,8 @@ func OrderPlan(steps []model.MigrationStep, deps []model.ObjectDependency) ([]in
 		}
 	}
 
-	// Kahn 拓扑排序（按 seq 稳定）
+	// Kahn 拓扑排序（按 seq 稳定）。order 保存的是步骤的真实 Seq 编号，
+	// 而非步骤在 steps 切片中的下标，确保调用方拿到的次序与步骤编号一致。
 	queue := make([]int, 0, n)
 	for i := 0; i < n; i++ {
 		if indeg[i] == 0 {
@@ -86,7 +87,7 @@ func OrderPlan(steps []model.MigrationStep, deps []model.ObjectDependency) ([]in
 		sort.Slice(queue, func(i, j int) bool { return steps[queue[i]].Seq < steps[queue[j]].Seq })
 		cur := queue[0]
 		queue = queue[1:]
-		order = append(order, cur)
+		order = append(order, steps[cur].Seq)
 		for _, nxt := range adj[cur] {
 			indeg[nxt]--
 			if indeg[nxt] == 0 {

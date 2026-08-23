@@ -106,3 +106,70 @@ func TestFreezePlanBlockedAnalysis(t *testing.T) {
 		t.Fatal("不存在的分析应报错")
 	}
 }
+
+// TestFreezePlanPreservesFullStepOrder 冻结计划必须保留全部真实步骤编号与完整执行顺序；
+// 冻结后重新读取计划，StepOrder 不得丢失首步、不得与 PlanHash 计算次序不一致。
+func TestFreezePlanPreservesFullStepOrder(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open("")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+	svc := New(store.NewRepositories(st))
+
+	if err := svc.RunDemo(ctx); err != nil {
+		t.Fatalf("RunDemo: %v", err)
+	}
+
+	// 找到演示生成的分析
+	analyses, err := svc.ListAnalyses(ctx)
+	if err != nil {
+		t.Fatalf("ListAnalyses: %v", err)
+	}
+	if len(analyses) != 1 {
+		t.Fatalf("期望 1 个分析，得到 %d", len(analyses))
+	}
+	analysisID := analyses[0].ID
+
+	// 冻结前先拿到分析返回的执行次序（真实步骤编号）
+	analysis, _, order, err := svc.RunAnalysis(ctx, analyses[0].SnapshotID, analyses[0].ScriptID)
+	if err != nil {
+		t.Fatalf("RunAnalysis: %v", err)
+	}
+	if analysis.ID != analysisID {
+		t.Fatalf("幂等分析返回 ID 不一致: %d != %d", analysis.ID, analysisID)
+	}
+	if len(order) == 0 {
+		t.Fatalf("执行次序为空")
+	}
+
+	plan, err := svc.FreezePlan(ctx, analysis.ID)
+	if err != nil {
+		t.Fatalf("FreezePlan: %v", err)
+	}
+
+	// 冻结写回的次序必须与分析次序完全一致，不得截断首步。
+	if len(plan.StepOrder) != len(order) {
+		t.Fatalf("计划次序长度 %d 与分析次序长度 %d 不一致", len(plan.StepOrder), len(order))
+	}
+	for i, seq := range plan.StepOrder {
+		if seq != order[i] {
+			t.Fatalf("计划次序在第 %d 步与真实次序不一致: plan=%v analysis=%v", i, plan.StepOrder, order)
+		}
+	}
+
+	// 冻结后重新读取：StepOrder 必须完整，不得再丢失一步。
+	reloaded, err := svc.GetPlan(ctx, plan.ID)
+	if err != nil {
+		t.Fatalf("GetPlan: %v", err)
+	}
+	if len(reloaded.StepOrder) != len(plan.StepOrder) {
+		t.Fatalf("重读计划丢失步骤: 重读长度 %d，冻结长度 %d", len(reloaded.StepOrder), len(plan.StepOrder))
+	}
+	for i, seq := range reloaded.StepOrder {
+		if seq != plan.StepOrder[i] {
+			t.Fatalf("重读计划次序在第 %d 步与冻结次序不一致: got=%v want=%v", i, reloaded.StepOrder, plan.StepOrder)
+		}
+	}
+}
